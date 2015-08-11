@@ -94,6 +94,7 @@ using namespace std;
 
 int main()
 {
+int modi=-1,offset=-1;
 
 #define READNUM 500
 const int bytesize = 2*READNUM; //read in 32 bits
@@ -104,7 +105,8 @@ uint32_t sum=0;
 deque<int16_t> elems;
 //int samplerate=32000;
 int samplerate=44100;
-double seconds=0.1;
+//double seconds=0.1;
+double seconds=42;
 int len=(int)(samplerate*seconds);
 int insound=len;
 int v=len*100;
@@ -116,6 +118,7 @@ int end=0;
 while( true){
 //fgets(buffer, bytesize, stdin);
 fread(buffer, 2,READNUM, stdin);
+//fwrite (buffer , 2,READNUM, stdout);
 
 if (feof(stdin) ) 
 {
@@ -124,7 +127,14 @@ end=1;
 
   for (int j=0;j<READNUM;j++)
   {
-  
+  if (offset!=-1)
+  {
+  if (i%modi==offset)
+  {
+  system("numlockx toggle");
+  }
+    //fprintf(stderr,"beat,%5d\n",i);
+  }
   i++;
   //memcpy( &c, buffer, bytesize);
   #define INT16_MIN 0
@@ -155,61 +165,87 @@ end=1;
 //usleep(100);
 //if (sum>7000000) return 0;
 //if (i%5000==0 )
-if (i%(len/2)==0 )
+
+if (i%(len/2)==0 && elems.size()>=len  && modi==-1)
 {
 double sum2=0;
 sum=0;
+int16_t e2[len];
+int k=0;
 for (deque<int16_t>::iterator o=elems.begin();o!=elems.end();++o)
 {
-double d=*o;
-sum2+=(d*d);
-//sum2+=abs(*o);
-sum+=abs(*o);
-//sum+=((*o)*(*o))/100;
-//  fprintf(stderr,"temp sound %" PRId16 " % " PRIu32 " %d\n",*o,sum/5000000,elems.size());
+//double q=*o;
+//e2[k]=sqrt(q*q);
+e2[k]=*o;
+k++;
 }
-sum2=sqrt(sum2/elems.size() );
-//  fprintf(stderr,"sound %" PRIu32 " % " PRId16 " %d\n",sum/1000000,c,elems.size());
 
-  double h=log10(sum2);
-//if (h>3.6)
-double lim=2.5;
-//print_progress(h,5,lim);
-//if (h>4.3) 
-fprintf(stderr,"%f\n",h);
-
-if (h>lim)
+for (int ww=0;ww<len-1;ww++)
 {
-  insound=len;
-//    fprintf(stderr,"sound %lf" " % " PRIu32 " %d\n",log10(sum2 ),sum/5000000,elems.size());
-  }
-  else 
-  {
-  //  fprintf(stderr,"nosound %lf" " % " PRIu32 " %d\n",log10(sum2 ),sum/5000000,elems.size());
-//  insound=false;
-  }
+e2[ww]=abs(e2[ww]-e2[ww+1]);
+
 }
-/*
-  if (sum>v) 
-  {
-  //in_sound=true;
-//  printf ("%d", ff );
-  if (i%5000==0) 
-  {
-  fprintf(stderr,"sound %" PRIu32 " % " PRId16 " %d\n",sum,c,elems.size());
-   // fprintf(stderr,"%d\n",(sum>0));
+
+int n=5;
+double summax=0;
+int sumi=0;
+for (int i=60;i<160;i+=1)
+{
+int16_t e3[len];
+
+double sumnow=0;
+//summax=0;
+int distance=samplerate*60/(i);
+
+for (int t=0;t<len;t++)
+{
+int a=0;
+double d=0;
+for (a=0;a<n;a++)
+{
+int pos=t-a*distance;
+if (pos<0) break;
+d+=e2[pos];
+}
+d=d/(a);
+//sumnow+=d*d;
+e3[t]=d;
+}
+for (int t=0;t<len-1;t++)
+{
+sumnow+=pow(abs(e3[t]-e3[t+1]),2);
+//sumnow+=pow(e3[t],2);
+}
+
+
+if (sumnow>summax)
+{
+summax=sumnow;
+sumi=i;
+//fprintf(stderr,"sumi uj max:%d %f\n",sumi,summax);
+}
+
+}
+modi=samplerate*60/sumi;
+double maxsum=0;
+for (int z=0;z<modi;z++)
+{
+double sumnow=0;
+for (int l=0;l<len;l+=modi)
+{
+sumnow+=e2[l];
+}
+if (sumnow>maxsum)
+{
+maxsum=sumnow;
+offset=(i+z)%modi;
+}
+
+}
+fprintf(stderr,"sumi:%d %f %d %d\n",sumi,summax,modi,offset);
+
   }
-  }
-  else
-  {
-    if (i%5000==0)
-    fprintf(stderr,"no sound %d\n",sum);
-    }
-  */
-  }
-  //buffer[0]=0; buffer[1]=0; buffer[2]=0; buffer[3]=0; //set to zero before next loop
- first_run=0;
- 
+ }
 }
 fclose(stdin);
 
