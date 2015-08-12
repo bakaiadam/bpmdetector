@@ -8,6 +8,9 @@
 #include <list>
 #include <deque>
 #include <unistd.h>
+#include <alsa/asoundlib.h>
+//#include <alsa/controls.h>
+
 
 //http://stackoverflow.com/questions/2616906/how-do-i-output-coloured-text-to-a-linux-terminal
 #include <iostream>
@@ -90,23 +93,51 @@ std::cerr.flush();
 
 using namespace std;
 
-
+static char *device = "default"; 
 
 int main()
 {
+//int samplerate=32000;
+int samplerate=44100;
+
+int err;
+
+snd_pcm_t *handle;
+    snd_pcm_sframes_t frames;
+
+
+    // ERROR HANDLING
+
+    if ((err = snd_pcm_open(&handle, device, SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
+            printf("Playback open error: %s\n", snd_strerror(err));
+            exit(EXIT_FAILURE);
+    }
+    
+    
+     if ((err = snd_pcm_set_params(handle,
+                                      SND_PCM_FORMAT_S16,
+                                      SND_PCM_ACCESS_RW_INTERLEAVED,
+                                      2,
+                                      samplerate,
+                                      0,
+                                      500000)) < 0) {   /* 0.5sec */
+                printf("Playback open error: %s\n", snd_strerror(err));
+                exit(EXIT_FAILURE);
+        }
+        
 int modi=-1,offset=-1;
 
 #define READNUM 500
+#define READNUM 1500
 const int bytesize = 2*READNUM; //read in 32 bits
 
 char buffer[bytesize];
 int16_t c = 0;
 uint32_t sum=0;
 deque<int16_t> elems;
-//int samplerate=32000;
-int samplerate=44100;
+
 //double seconds=0.1;
-double seconds=42;
+double seconds=12;
 int len=(int)(samplerate*seconds);
 int insound=len;
 int v=len*100;
@@ -119,7 +150,10 @@ while( true){
 //fgets(buffer, bytesize, stdin);
 fread(buffer, 2,READNUM, stdin);
 //fwrite (buffer , 2,READNUM, stdout);
-
+snd_pcm_writei(handle, buffer, READNUM); 
+//fprintf(stderr,"nem jo\n");
+snd_pcm_drain(handle);
+continue;
 if (feof(stdin) ) 
 {
 end=1;
@@ -131,9 +165,10 @@ end=1;
   {
   if (i%modi==offset)
   {
-  system("numlockx toggle");
+ // system("numlockx toggle");
+  fprintf(stderr,"beat,%5d\n",i);
   }
-    //fprintf(stderr,"beat,%5d\n",i);
+   
   }
   i++;
   //memcpy( &c, buffer, bytesize);
