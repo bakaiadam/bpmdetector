@@ -90,6 +90,10 @@ std::cerr.flush();
 
 
 
+	
+	
+
+
 
 using namespace std;
 
@@ -97,33 +101,109 @@ static char *device = "default";
 
 int main()
 {
-//int samplerate=32000;
-int samplerate=44100;
+
+
+	unsigned int pcm, tmp, dir;
+	unsigned int rate, channels, seconds2;
+	snd_pcm_t *pcm_handle;
+	snd_pcm_hw_params_t *params;
+	snd_pcm_uframes_t frames;
+	char *buff;
+	int buff_size, loops;
+
+/*	if (argc < 4) {
+		printf("Usage: %s <sample_rate> <channels> <seconds>\n",
+								argv[0]);
+		return -1;
+	}
+*/
+	rate 	 = 44100;
+	channels = 2;
+	seconds2  = 999;
+#define PCM_DEVICE "default"
+if (pcm = snd_pcm_open(&pcm_handle, "default",
+					SND_PCM_STREAM_PLAYBACK, 0) < 0) 
+		printf("ERROR: Can't open \"%s\" PCM device. %s\n",
+					PCM_DEVICE, snd_strerror(pcm));
 
 int err;
-
-snd_pcm_t *handle;
-    snd_pcm_sframes_t frames;
-
-
-    // ERROR HANDLING
-
-    if ((err = snd_pcm_open(&handle, device, SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
-            printf("Playback open error: %s\n", snd_strerror(err));
-            exit(EXIT_FAILURE);
-    }
-    
-    
-     if ((err = snd_pcm_set_params(handle,
+ if ((err = snd_pcm_set_params(pcm_handle,
                                       SND_PCM_FORMAT_S16,
                                       SND_PCM_ACCESS_RW_INTERLEAVED,
                                       2,
-                                      samplerate,
+                                      44100,
                                       0,
-                                      500000)) < 0) {   /* 0.5sec */
+                                      5000000)) < 0) {   /* 0.5sec */
                 printf("Playback open error: %s\n", snd_strerror(err));
                 exit(EXIT_FAILURE);
         }
+
+
+	/* Allocate parameters object and fill it with default values*/
+	snd_pcm_hw_params_alloca(&params);
+
+	snd_pcm_hw_params_any(pcm_handle, params);
+
+	/* Set parameters */
+	if (pcm = snd_pcm_hw_params_set_access(pcm_handle, params,
+					SND_PCM_ACCESS_RW_INTERLEAVED) < 0) 
+		printf("ERROR: Can't set interleaved mode. %s\n", snd_strerror(pcm));
+
+	if (pcm = snd_pcm_hw_params_set_format(pcm_handle, params,
+						SND_PCM_FORMAT_S16_LE) < 0) 
+		printf("ERROR: Can't set format. %s\n", snd_strerror(pcm));
+
+	if (pcm = snd_pcm_hw_params_set_channels(pcm_handle, params, channels) < 0) 
+		printf("ERROR: Can't set channels number. %s\n", snd_strerror(pcm));
+
+	if (pcm = snd_pcm_hw_params_set_rate_near(pcm_handle, params, &rate, 0) < 0) 
+		printf("ERROR: Can't set rate. %s\n", snd_strerror(pcm));
+
+unsigned int buffer_time=500;
+            snd_pcm_hw_params_set_buffer_time_near(pcm_handle, params,
+                                               &buffer_time, 0);
+                                              
+	/* Write parameters */
+	if (pcm = snd_pcm_hw_params(pcm_handle, params) < 0)
+		printf("ERROR: Can't set harware parameters. %s\n", snd_strerror(pcm));
+
+	/* Resume information */
+	printf("PCM name: '%s'\n", snd_pcm_name(pcm_handle));
+
+	printf("PCM state: %s\n", snd_pcm_state_name(snd_pcm_state(pcm_handle)));
+
+	snd_pcm_hw_params_get_channels(params, &tmp);
+	printf("channels: %i ", tmp);
+
+	if (tmp == 1)
+		printf("(mono)\n");
+	else if (tmp == 2)
+		printf("(stereo)\n");
+
+	snd_pcm_hw_params_get_rate(params, &tmp, 0);
+	printf("rate: %d bps\n", tmp);
+
+	//printf("seconds: %d\n", seconds);	
+
+	/* Allocate buffer to hold single period */
+	snd_pcm_hw_params_get_period_size(params, &frames, 0);
+printf("frames:%d\n",frames);
+	buff_size = frames * channels * 2 /1 /* 2 -> sample size */ ;
+	buff = (char *) malloc(buff_size);
+printf("%d\n",buff_size);
+	snd_pcm_hw_params_get_period_time(params, &tmp, NULL);
+
+	
+	
+	
+//int samplerate=32000;
+int samplerate=44100;
+
+
+snd_pcm_t *handle;
+
+
+    
         
 int modi=-1,offset=-1;
 
@@ -131,13 +211,13 @@ int modi=-1,offset=-1;
 #define READNUM 1500
 const int bytesize = 2*READNUM; //read in 32 bits
 
-char buffer[bytesize];
+char buffer[buff_size];
 int16_t c = 0;
 uint32_t sum=0;
 deque<int16_t> elems;
 
 //double seconds=0.1;
-double seconds=12;
+double seconds=42;
 int len=(int)(samplerate*seconds);
 int insound=len;
 int v=len*100;
@@ -147,25 +227,36 @@ double sum2=0;
 int first_run=1;
 int end=0;
 while( true){
+
 //fgets(buffer, bytesize, stdin);
-fread(buffer, 2,READNUM, stdin);
+fread(buffer, 1,buff_size, stdin);
 //fwrite (buffer , 2,READNUM, stdout);
-snd_pcm_writei(handle, buffer, READNUM); 
-//fprintf(stderr,"nem jo\n");
-snd_pcm_drain(handle);
-continue;
+
+if (pcm = snd_pcm_writei(pcm_handle, buffer, frames) == -EPIPE) {
+			printf("XRUN.\n");
+			snd_pcm_prepare(pcm_handle);
+//snd_pcm_recover(pcm_handle,pcm,0);
+		} else if (pcm < 0) {
+			printf("ERROR. Can't write to PCM device. %s\n", snd_strerror(pcm));
+		}
+//	printf("kov\n");	
+		
+//continue;
+
+
 if (feof(stdin) ) 
 {
 end=1;
 }
 
-  for (int j=0;j<READNUM;j++)
+  //for (int j=0;j<READNUM;j++)
+  for (int j=0;j<buff_size/2;j++)
   {
   if (offset!=-1)
   {
   if (i%modi==offset)
   {
- // system("numlockx toggle");
+  system("numlockx toggle");
   fprintf(stderr,"beat,%5d\n",i);
   }
    
@@ -180,7 +271,7 @@ end=1;
   elems.pop_front();
   {
   char * b=(char*)&ff;
-  printf("%c%c",b[0],b[1]);
+  //printf("%c%c",b[0],b[1]);
   }
   
   }
